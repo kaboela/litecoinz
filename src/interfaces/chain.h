@@ -225,9 +225,8 @@ public:
         virtual ~Notifications() {}
         virtual void TransactionAddedToMempool(const CTransactionRef& tx) {}
         virtual void TransactionRemovedFromMempool(const CTransactionRef& ptx) {}
-        virtual void BlockConnected(const CBlock& block, const std::vector<CTransactionRef>& tx_conflicted) {}
-        virtual void BlockDisconnected(const CBlock& block) {}
-        virtual void ChainTip(const CBlock& block, const CBlockIndex *pindex, bool added) {}
+        virtual void BlockConnected(const CBlock& block, const CBlockIndex *pindex, const std::vector<CTransactionRef>& tx_conflicted) {}
+        virtual void BlockDisconnected(const CBlock& block, const CBlockIndex *pindex) {}
         virtual void UpdatedBlockTip() {}
         virtual void ChainStateFlushed(const CBlockLocator& locator) {}
     };

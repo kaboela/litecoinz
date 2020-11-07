@@ -2877,10 +2877,7 @@ bool CChainState::DisconnectTip(CValidationState& state, const CChainParams& cha
     UpdateTip(pindexDelete->pprev, chainparams);
     // Let wallets know transactions went from 1-confirmed to
     // 0-confirmed or conflicted:
-    GetMainSignals().BlockDisconnected(pblock);
-
-    // Update cached incremental witnesses
-    GetMainSignals().ChainTip(pblock, pindexDelete, false);
+    GetMainSignals().BlockDisconnected(pblock, pindexDelete);
 
     return true;
 }
@@ -3272,9 +3269,6 @@ bool CChainState::ActivateBestChain(CValidationState &state, const CChainParams&
                 for (const PerBlockConnectTrace& trace : connectTrace.GetBlocksConnected()) {
                     assert(trace.pblock && trace.pindex);
                     GetMainSignals().BlockConnected(trace.pblock, trace.pindex, trace.conflictedTxs);
-
-                    // Update cached incremental witnesses
-                    GetMainSignals().ChainTip(trace.pblock, trace.pindex, true);
                 }
             } while (!m_chain.Tip() || (starting_tip && CBlockIndexWorkComparator()(m_chain.Tip(), starting_tip)));
             if (!blocks_connected) return true;
