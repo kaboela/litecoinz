@@ -74,7 +74,6 @@ public:
     CMainParams() {
         strNetworkID = "main";
         bip44CoinType = 221; // As registered in https://github.com/satoshilabs/slips/blob/master/slip-0044.md
-        consensus.nApproxReleaseHeight = 850000;
         consensus.fCoinbaseMustBeShielded = false;
         consensus.nSubsidyHalvingInterval = 840000;
         consensus.BIP16Enabled = true;
@@ -93,9 +92,9 @@ public:
         consensus.nDigishieldMaxAdjustDown = 32; // 32% adjustment down
         consensus.nDigishieldMaxAdjustUp = 16; // 16% adjustment up
 
-        consensus.nZawyLWMAHeight = 600000;
-        consensus.nZawyLwmaAveragingWindow = 45;
-        consensus.nZawyLwmaAdjustedWeight = 13772;
+        // POW DDA LWMA Parameters
+        consensus.nLwmaForkHeight = 600000;
+        consensus.nLwmaAveragingWindow = 60;
 
         consensus.nPowTargetSpacing = 10 * 60;
         consensus.fPowAllowMinDifficultyBlocks = false;
@@ -141,8 +140,8 @@ public:
         pchMessageStart[3] = 0x93;
         nDefaultPort = 29333;
         nPruneAfterHeight = 100000;
-        m_assumed_blockchain_size = 280;
-        m_assumed_chain_state_size = 4;
+        m_assumed_blockchain_size = 5;
+        m_assumed_chain_state_size = 1;
 
         genesis = CreateGenesisBlock(
             1512832667,
@@ -235,7 +234,6 @@ public:
     CTestNetParams() {
         strNetworkID = "test";
         bip44CoinType = 1;
-        consensus.nApproxReleaseHeight = 50000;
         consensus.fCoinbaseMustBeShielded = false;
         consensus.nSubsidyHalvingInterval = 840000;
         consensus.BIP16Enabled = true;
@@ -254,9 +252,9 @@ public:
         consensus.nDigishieldMaxAdjustDown = 32; // 32% adjustment down
         consensus.nDigishieldMaxAdjustUp = 16; // 16% adjustment up
 
-        consensus.nZawyLWMAHeight = 6500;
-        consensus.nZawyLwmaAveragingWindow = 45;
-        consensus.nZawyLwmaAdjustedWeight = 13772;
+        // POW DDA LWMA Parameters
+        consensus.nLwmaForkHeight = 6500;
+        consensus.nLwmaAveragingWindow = 60;
 
         consensus.nPowTargetSpacing = 10 * 60;
         consensus.fPowAllowMinDifficultyBlocks = false;
@@ -297,8 +295,8 @@ public:
         pchMessageStart[3] = 0x5d;
         nDefaultPort = 39333;
         nPruneAfterHeight = 1000;
-        m_assumed_blockchain_size = 30;
-        m_assumed_chain_state_size = 2;
+        m_assumed_blockchain_size = 5;
+        m_assumed_chain_state_size = 1;
 
         genesis = CreateGenesisBlock(
             1511954736,
@@ -377,7 +375,6 @@ public:
     explicit CRegTestParams(const ArgsManager& args) {
         strNetworkID = "regtest";
         bip44CoinType = 1;
-        consensus.nApproxReleaseHeight = 200000;
         consensus.fCoinbaseMustBeShielded = false;
         consensus.nSubsidyHalvingInterval = 1500;
         consensus.BIP16Enabled = true;
@@ -396,9 +393,9 @@ public:
         consensus.nDigishieldMaxAdjustDown = 0; // Turn off adjustment down
         consensus.nDigishieldMaxAdjustUp = 0; // Turn off adjustment up
 
-        consensus.nZawyLWMAHeight = -1; // Activated on regtest
-        consensus.nZawyLwmaAveragingWindow = 45;
-        consensus.nZawyLwmaAdjustedWeight = 13772;
+        // POW DDA LWMA Parameters
+        consensus.nLwmaForkHeight = -1; // Activated on regtest
+        consensus.nLwmaAveragingWindow = 60;
 
         consensus.nPowTargetSpacing = 10 * 60;
         consensus.fPowAllowMinDifficultyBlocks = true;
@@ -439,7 +436,7 @@ public:
         pchMessageStart[3] = 0xda;
         nDefaultPort = 49444;
         nPruneAfterHeight = 1000;
-        m_assumed_blockchain_size = 0;
+        m_assumed_blockchain_size = 2;
         m_assumed_chain_state_size = 0;
 
         UpdateActivationParametersFromArgs(args);

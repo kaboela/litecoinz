@@ -34,7 +34,6 @@
 #include <util/translation.h>
 #include <util/validation.h>
 #include <validation.h>
-#include <wallet/asyncrpcoperation_saplingmigration.h>
 #include <wallet/coincontrol.h>
 #include <wallet/fees.h>
 #include <zcashparams.h>
@@ -111,9 +110,11 @@ std::unique_ptr<interfaces::Handler> HandleLoadWallet(LoadWalletFn load_wallet)
     return interfaces::MakeHandler([it] { LOCK(cs_wallets); g_load_wallet_fns.erase(it); });
 }
 
+static Mutex g_loading_wallet_mutex;
 static Mutex g_wallet_release_mutex;
 static std::condition_variable g_wallet_release_cv;
-static std::set<std::string> g_unloading_wallet_set;
+static std::set<std::string> g_loading_wallet_set GUARDED_BY(g_loading_wallet_mutex);
+static std::set<std::string> g_unloading_wallet_set GUARDED_BY(g_wallet_release_mutex);
 
 // Custom deleter for shared_ptr<CWallet>.
 static void ReleaseWallet(CWallet* wallet)
@@ -157,20 +158,39 @@ void UnloadWallet(std::shared_ptr<CWallet>&& wallet)
     }
 }
 
+namespace {
+std::shared_ptr<CWallet> LoadWalletInternal(interfaces::Chain& chain, const WalletLocation& location, std::string& error, std::vector<std::string>& warnings)
+{
+    try {
+        if (!CWallet::Verify(chain, location, false, error, warnings)) {
+            error = "Wallet file verification failed: " + error;
+            return nullptr;
+        }
+
+        std::shared_ptr<CWallet> wallet = CWallet::CreateWalletFromFile(chain, location, error, warnings);
+        if (!wallet) {
+            error = "Wallet loading failed: " + error;
+            return nullptr;
+        }
+        AddWallet(wallet);
+        wallet->postInitProcess();
+        return wallet;
+    } catch (const std::runtime_error& e) {
+        error = e.what();
+        return nullptr;
+    }
+}
+} // namespace
+
 std::shared_ptr<CWallet> LoadWallet(interfaces::Chain& chain, const WalletLocation& location, std::string& error, std::vector<std::string>& warnings)
 {
-    if (!CWallet::Verify(chain, location, false, error, warnings)) {
-        error = "Wallet file verification failed: " + error;
+    auto result = WITH_LOCK(g_loading_wallet_mutex, return g_loading_wallet_set.insert(location.GetName()));
+    if (!result.second) {
+        error = "Wallet already being loading.";
         return nullptr;
     }
-
-    std::shared_ptr<CWallet> wallet = CWallet::CreateWalletFromFile(chain, location, error, warnings);
-    if (!wallet) {
-        error = "Wallet loading failed: " + error;
-        return nullptr;
-    }
-    AddWallet(wallet);
-    wallet->postInitProcess();
+    auto wallet = LoadWalletInternal(chain, location, error, warnings);
+    WITH_LOCK(g_loading_wallet_mutex, g_loading_wallet_set.erase(result.first));
     return wallet;
 }
 
@@ -981,10 +1001,8 @@ void CWallet::ChainTip(const CBlock& block, const CBlockIndex *pindex, bool adde
     LOCK(cs_wallet);
 
     if (added) {
-        if (!::ChainstateActive().IsInitialBlockDownload() && (block.GetBlockTime() > GetAdjustedTime() - 3 * 60 * 60))
-        {
+        if (!::ChainstateActive().IsInitialBlockDownload() && (block.GetBlockTime() > GetAdjustedTime() - 3 * 60 * 60)) {
             BuildWitnessCache(pindex, false);
-            RunSaplingMigration(pindex->nHeight);
         } else {
             // Build intial witnesses on every block
             BuildWitnessCache(pindex, true);
@@ -993,52 +1011,6 @@ void CWallet::ChainTip(const CBlock& block, const CBlockIndex *pindex, bool adde
         DecrementNoteWitnesses(pindex);
         UpdateNullifierNoteMapForBlock(&block);
     }
-}
-
-void CWallet::RunSaplingMigration(int blockHeight) {
-    if (!Params().GetConsensus().NetworkUpgradeActive(blockHeight, Consensus::UPGRADE_SAPLING)) {
-        return;
-    }
-    // need cs_wallet to call CommitTransaction()
-    LOCK2(cs_main, cs_wallet);
-    if (!fSaplingMigrationEnabled) {
-        return;
-    }
-    // The migration transactions to be sent in a particular batch can take
-    // significant time to generate, and this time depends on the speed of the user's
-    // computer. If they were generated only after a block is seen at the target
-    // height minus 1, then this could leak information. Therefore, for target
-    // height N, implementations SHOULD start generating the transactions at around
-    // height N-5
-    if (blockHeight % 500 == 495) {
-        std::shared_ptr<AsyncRPCQueue> q = getAsyncRPCQueue();
-        std::shared_ptr<AsyncRPCOperation> lastOperation = q->getOperationForId(saplingMigrationOperationId);
-        if (lastOperation != nullptr) {
-            lastOperation->cancel();
-        }
-        pendingSaplingMigrationTxs.clear();
-        JSONRPCRequest request;
-        std::shared_ptr<AsyncRPCOperation> operation(new AsyncRPCOperation_saplingmigration(blockHeight + 5, request));
-        saplingMigrationOperationId = operation->getId();
-        q->addOperation(operation);
-    } else if (blockHeight % 500 == 499) {
-        mapValue_t mapValue;
-        std::shared_ptr<AsyncRPCQueue> q = getAsyncRPCQueue();
-        std::shared_ptr<AsyncRPCOperation> lastOperation = q->getOperationForId(saplingMigrationOperationId);
-        if (lastOperation != nullptr) {
-            lastOperation->cancel();
-        }
-        for (const CTransactionRef& transaction : pendingSaplingMigrationTxs) {
-            // Send the transaction
-            CommitTransaction(transaction, std::move(mapValue), {} /* orderForm */);
-        }
-        pendingSaplingMigrationTxs.clear();
-    }
-}
-
-void CWallet::AddPendingSaplingMigrationTx(const CTransactionRef& tx) {
-    LOCK(cs_wallet);
-    pendingSaplingMigrationTxs.push_back(tx);
 }
 
 void CWallet::ChainStateFlushed(const CBlockLocator& loc)
@@ -1139,8 +1111,7 @@ bool CWallet::IsNoteSproutChange(
     // - Change created by spending fractions of Notes (because
     //   z_sendmany sends change to the originating z-address).
     // - "Chaining Notes" used to connect JoinSplits together.
-    // - Notes created by consolidation transactions (e.g. using
-    //   z_mergetoaddress).
+    // - Notes created by consolidation transactions.
     // - Notes sent from one address to itself.
     for (const JSDescription & jsd : mapWallet.at(jsop.hash).tx->vJoinSplit) {
         for (const uint256 & nullifier : jsd.nullifiers) {
@@ -1161,8 +1132,7 @@ bool CWallet::IsNoteSaplingChange(const std::set<std::pair<libzcash::PaymentAddr
     // for instance:
     // - Change created by spending fractions of Notes (because
     //   z_sendmany sends change to the originating z-address).
-    // - Notes created by consolidation transactions (e.g. using
-    //   z_mergetoaddress).
+    // - Notes created by consolidation transactions.
     // - Notes sent from one address to itself.
     for (const SpendDescription &spend : mapWallet.at(op.hash).tx->vShieldedSpend) {
         if (nullifierSet.count(std::make_pair(address, spend.nullifier))) {
@@ -1739,7 +1709,7 @@ void CWallet::BuildWitnessCache(const CBlockIndex* pindex, bool witnessOnly)
 
     while (pblockindex) {
         if (pblockindex->nHeight % 100 == 0 && pblockindex->nHeight < height - 5) {
-            LogPrintf("Building Witnesses for block %i %.4f complete\n", pblockindex->nHeight, pblockindex->nHeight / double(height));
+            LogPrintf("Building Witnesses for block %i %.4f%% complete\n", pblockindex->nHeight, pblockindex->nHeight / double(height) * 100);
         }
 
         SproutMerkleTree sproutTree;
@@ -4873,14 +4843,6 @@ bool CWallet::CreateTransaction(interfaces::Chain::Lock& locked_chain, const std
     int nextBlockHeight = ::ChainActive().Tip()->nHeight + 1;
     CMutableTransaction txNew = CreateNewContextualCMutableTransaction(Params().GetConsensus(), nextBlockHeight);
 
-    // Activates after Overwinter network upgrade
-    if (Params().GetConsensus().NetworkUpgradeActive(nextBlockHeight, Consensus::UPGRADE_OVERWINTER)) {
-        if (txNew.nExpiryHeight >= TX_EXPIRY_HEIGHT_THRESHOLD){
-            strFailReason = _("nExpiryHeight must be less than TX_EXPIRY_HEIGHT_THRESHOLD.").translated;
-            return false;
-        }
-    }
-
     txNew.nLockTime = GetLocktimeForNewTransaction(chain(), locked_chain);
 
     FeeCalculation feeCalc;
@@ -6435,9 +6397,6 @@ std::shared_ptr<CWallet> CWallet::CreateWalletFromFile(interfaces::Chain& chain,
         }
     }
 
-    // Set sapling migration status
-    walletInstance->fSaplingMigrationEnabled = gArgs.GetBoolArg("-migration", false);
-
     if (fFirstRun)
     {
         // ensure this wallet.dat can only be opened by clients supporting HD with chain split and expects no default key
@@ -6505,6 +6464,9 @@ std::shared_ptr<CWallet> CWallet::CreateWalletFromFile(interfaces::Chain& chain,
         }
         walletInstance->m_fallback_fee = CFeeRate(nFeePerK);
         walletInstance->m_allow_fallback_fee = nFeePerK != 0; //disable fallback fee in case value was set to 0, enable if non-null value
+    } else {
+        walletInstance->m_fallback_fee = CFeeRate(DEFAULT_FALLBACK_FEE);
+        walletInstance->m_allow_fallback_fee = true; //enable fallback fee using default amount
     }
     if (gArgs.IsArgSet("-discardfee")) {
         CAmount nFeePerK = 0;
@@ -6561,25 +6523,6 @@ std::shared_ptr<CWallet> CWallet::CreateWalletFromFile(interfaces::Chain& chain,
     walletInstance->m_confirm_target = gArgs.GetArg("-txconfirmtarget", DEFAULT_TX_CONFIRM_TARGET);
     walletInstance->m_spend_zero_conf_change = gArgs.GetBoolArg("-spendzeroconfchange", DEFAULT_SPEND_ZEROCONF_CHANGE);
     walletInstance->m_signal_rbf = gArgs.GetBoolArg("-walletrbf", DEFAULT_WALLET_RBF);
-
-    // Check Sapling migration address if set and is a valid Sapling address
-    if (gArgs.IsArgSet("-migrationdestaddress")) {
-        std::string migrationDestAddress = gArgs.GetArg("-migrationdestaddress", "");
-        libzcash::PaymentAddress address = DecodePaymentAddress(migrationDestAddress);
-        if (boost::get<libzcash::SaplingPaymentAddress>(&address) == nullptr) {
-            error = strprintf(_("-migrationdestaddress must be a valid Sapling address.").translated);
-            return nullptr;
-        }
-    }
-
-    if (gArgs.IsArgSet("-txexpirydelta")) {
-        int64_t expiryDelta = gArgs.GetArg("-txexpirydelta", DEFAULT_TX_EXPIRY_DELTA);
-        int64_t minExpiryDelta = TX_EXPIRING_SOON_THRESHOLD + 1;
-        if (expiryDelta < minExpiryDelta) {
-            error = strprintf(_("Invalid value for -txexpirydelta='%u' (must be least %u).").translated, expiryDelta, minExpiryDelta);
-            return nullptr;
-        }
-    }
 
     walletInstance->WalletLogPrintf("Wallet completed loading in %15dms\n", GetTimeMillis() - nStart);
 
