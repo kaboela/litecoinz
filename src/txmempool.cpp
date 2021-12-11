@@ -10,6 +10,7 @@
 #include <consensus/tx_check.h>
 #include <consensus/tx_verify.h>
 #include <consensus/validation.h>
+#include <optional.h>
 #include <validation.h>
 #include <policy/policy.h>
 #include <policy/fees.h>
@@ -157,7 +158,7 @@ bool CTxMemPool::CalculateMemPoolAncestors(const CTxMemPoolEntry &entry, setEntr
         // GetMemPoolParents() is only valid for entries in the mempool, so we
         // iterate mapTx to find parents.
         for (unsigned int i = 0; i < tx.vin.size(); i++) {
-            boost::optional<txiter> piter = GetIter(tx.vin[i].prevout.hash);
+            Optional<txiter> piter = GetIter(tx.vin[i].prevout.hash);
             if (piter) {
                 parentHashes.insert(*piter);
                 if (parentHashes.size() + 1 > limitAncestorCount) {
@@ -1137,11 +1138,11 @@ const CTransaction* CTxMemPool::GetConflictTx(const COutPoint& prevout) const
     return it == mapNextTx.end() ? nullptr : it->second;
 }
 
-boost::optional<CTxMemPool::txiter> CTxMemPool::GetIter(const uint256& txid) const
+Optional<CTxMemPool::txiter> CTxMemPool::GetIter(const uint256& txid) const
 {
     auto it = mapTx.find(txid);
     if (it != mapTx.end()) return it;
-    return boost::optional<txiter>{};
+    return Optional<txiter>{};
 }
 
 CTxMemPool::setEntries CTxMemPool::GetIterSet(const std::set<uint256>& hashes) const
@@ -1389,26 +1390,6 @@ void CTxMemPool::SetIsLoaded(bool loaded)
 {
     LOCK(cs);
     m_is_loaded = loaded;
-}
-
-void CTxMemPool::removeExpired(unsigned int nBlockHeight)
-{
-    // Remove expired txs from the mempool
-    AssertLockHeld(cs);
-    setEntries txToRemove;
-
-    for (indexed_transaction_set::const_iterator it = mapTx.begin(); it != mapTx.end(); it++) {
-        const CTransaction& tx = it->GetTx();
-        if (IsExpiredTx(tx, nBlockHeight)) {
-            LogPrint(BCLog::MEMPOOL, "Removing expired txid: %s\n", tx.GetHash().ToString());
-            txToRemove.insert(it);
-        }
-    }
-    setEntries setAllRemoves;
-    for (txiter it : txToRemove) {
-        CalculateDescendants(it, setAllRemoves);
-    }
-    RemoveStaged(setAllRemoves, false, MemPoolRemovalReason::REORG);
 }
 
 SaltedTxidHasher::SaltedTxidHasher() : k0(GetRand(std::numeric_limits<uint64_t>::max())), k1(GetRand(std::numeric_limits<uint64_t>::max())) {}

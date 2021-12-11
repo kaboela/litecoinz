@@ -11,9 +11,7 @@
 
 #include <memory>
 
-#include <boost/foreach.hpp>
-#include <boost/format.hpp>
-#include <boost/optional.hpp>
+#include <optional.h>
 #include <fstream>
 #include <tinyformat.h>
 #include <sync.h>

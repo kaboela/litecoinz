@@ -583,8 +583,8 @@ UniValue importwallet_impl(const JSONRPCRequest& request, bool fImportZKeys)
                 auto spendingkey = DecodeSpendingKey(vstr[0]);
                 int64_t nTime = DecodeDumpTime(vstr[1]);
                 // Only include hdKeypath and seedFpStr if we have both
-                boost::optional<std::string> hdKeypath = (vstr.size() > 3) ? boost::optional<std::string>(vstr[2]) : boost::none;
-                boost::optional<std::string> seedFpStr = (vstr.size() > 3) ? boost::optional<std::string>(vstr[3]) : boost::none;
+                Optional<std::string> hdKeypath = (vstr.size() > 3) ? Optional<std::string>(vstr[2]) : nullopt;
+                Optional<std::string> seedFpStr = (vstr.size() > 3) ? Optional<std::string>(vstr[3]) : nullopt;
                 if (IsValidSpendingKey(spendingkey)) {
                     auto addResult = boost::apply_visitor(
                         AddSpendingKeyToWallet(pwallet, Params().GetConsensus(), nTime, hdKeypath, seedFpStr, true), spendingkey);
@@ -890,7 +890,7 @@ UniValue dumpwallet_impl(const JSONRPCRequest& request, bool fDumpZKeys)
         for (auto addr : sproutAddresses) {
             libzcash::SproutSpendingKey key;
             if (pwallet->GetSproutSpendingKey(addr, key)) {
-                std::string strTime = FormatISO8601DateTime(pwallet->mapSproutZKeyMetadata[addr].nCreateTime);
+                std::string strTime = FormatISO8601DateTime(pwallet->mapSproutKeyMetadata[addr].nCreateTime);
                 file << strprintf("%s %s # zaddr=%s\n", EncodeSpendingKey(key), strTime, EncodePaymentAddress(addr));
             }
         }
@@ -903,7 +903,7 @@ UniValue dumpwallet_impl(const JSONRPCRequest& request, bool fDumpZKeys)
             libzcash::SaplingExtendedSpendingKey extsk;
             if (pwallet->GetSaplingExtendedSpendingKey(addr, extsk)) {
                 auto ivk = extsk.expsk.full_viewing_key().in_viewing_key();
-                CKeyMetadata keyMeta = pwallet->mapSaplingZKeyMetadata[ivk];
+                CKeyMetadata keyMeta = pwallet->mapSaplingKeyMetadata[ivk];
                 std::string strTime = FormatISO8601DateTime(keyMeta.nCreateTime);
                 // Keys imported with z_importkey do not have zip32 metadata
                 if (keyMeta.hdKeypath.empty() || keyMeta.seedFp.IsNull()) {

@@ -74,8 +74,6 @@ public:
     CMainParams() {
         strNetworkID = "main";
         bip44CoinType = 221; // As registered in https://github.com/satoshilabs/slips/blob/master/slip-0044.md
-        consensus.nApproxReleaseHeight = 850000;
-        consensus.fCoinbaseMustBeShielded = false;
         consensus.nSubsidyHalvingInterval = 840000;
         consensus.BIP16Enabled = true;
         consensus.BIP34Enabled = true;
@@ -93,9 +91,9 @@ public:
         consensus.nDigishieldMaxAdjustDown = 32; // 32% adjustment down
         consensus.nDigishieldMaxAdjustUp = 16; // 16% adjustment up
 
-        consensus.nZawyLWMAHeight = 600000;
-        consensus.nZawyLwmaAveragingWindow = 45;
-        consensus.nZawyLwmaAdjustedWeight = 13772;
+        // POW DDA LWMA Parameters
+        consensus.nLwmaForkHeight = 600000;
+        consensus.nLwmaAveragingWindow = 60;
 
         consensus.nPowTargetSpacing = 10 * 60;
         consensus.fPowAllowMinDifficultyBlocks = false;
@@ -115,8 +113,8 @@ public:
         consensus.vUpgrades[Consensus::UPGRADE_SAPLING].nActivationHeight = 190000;
         const size_t N1 = 200, K1 = 9;
         const size_t N2 = 144, K2 = 5;
-        BOOST_STATIC_ASSERT(equihash_parameters_acceptable(N1, K1));
-        BOOST_STATIC_ASSERT(equihash_parameters_acceptable(N2, K2));
+        static_assert(equihash_parameters_acceptable(N1, K1));
+        static_assert(equihash_parameters_acceptable(N2, K2));
         consensus.nEquihashN1 = N1;
         consensus.nEquihashK1 = K1;
         consensus.nEquihashN2 = N2;
@@ -141,8 +139,8 @@ public:
         pchMessageStart[3] = 0x93;
         nDefaultPort = 29333;
         nPruneAfterHeight = 100000;
-        m_assumed_blockchain_size = 280;
-        m_assumed_chain_state_size = 4;
+        m_assumed_blockchain_size = 5;
+        m_assumed_chain_state_size = 1;
 
         genesis = CreateGenesisBlock(
             1512832667,
@@ -183,7 +181,7 @@ public:
         bech32HRPs[SAPLING_FULL_VIEWING_KEY]     = "zviews";
         bech32HRPs[SAPLING_INCOMING_VIEWING_KEY] = "zivks";
         bech32HRPs[SAPLING_EXTENDED_SPEND_KEY]   = "secret-extended-key-main";
-        bech32HRPs[SAPLING_EXTENDED_FVK]         = "zxviewtestsapling";
+        bech32HRPs[SAPLING_EXTENDED_FVK]         = "zxviews";
 
         vFixedSeeds = std::vector<SeedSpec6>(pnSeed6_main, pnSeed6_main + ARRAYLEN(pnSeed6_main));
 
@@ -235,8 +233,6 @@ public:
     CTestNetParams() {
         strNetworkID = "test";
         bip44CoinType = 1;
-        consensus.nApproxReleaseHeight = 50000;
-        consensus.fCoinbaseMustBeShielded = false;
         consensus.nSubsidyHalvingInterval = 840000;
         consensus.BIP16Enabled = true;
         consensus.BIP34Enabled = true;
@@ -254,9 +250,9 @@ public:
         consensus.nDigishieldMaxAdjustDown = 32; // 32% adjustment down
         consensus.nDigishieldMaxAdjustUp = 16; // 16% adjustment up
 
-        consensus.nZawyLWMAHeight = 6500;
-        consensus.nZawyLwmaAveragingWindow = 45;
-        consensus.nZawyLwmaAdjustedWeight = 13772;
+        // POW DDA LWMA Parameters
+        consensus.nLwmaForkHeight = 6500;
+        consensus.nLwmaAveragingWindow = 60;
 
         consensus.nPowTargetSpacing = 10 * 60;
         consensus.fPowAllowMinDifficultyBlocks = false;
@@ -276,8 +272,8 @@ public:
         consensus.vUpgrades[Consensus::UPGRADE_SAPLING].nActivationHeight = 4000;
         const size_t N1 = 200, K1 = 9;
         const size_t N2 = 144, K2 = 5;
-        BOOST_STATIC_ASSERT(equihash_parameters_acceptable(N1, K1));
-        BOOST_STATIC_ASSERT(equihash_parameters_acceptable(N2, K2));
+        static_assert(equihash_parameters_acceptable(N1, K1));
+        static_assert(equihash_parameters_acceptable(N2, K2));
         consensus.nEquihashN1 = N1;
         consensus.nEquihashK1 = K1;
         consensus.nEquihashN2 = N2;
@@ -297,8 +293,8 @@ public:
         pchMessageStart[3] = 0x5d;
         nDefaultPort = 39333;
         nPruneAfterHeight = 1000;
-        m_assumed_blockchain_size = 30;
-        m_assumed_chain_state_size = 2;
+        m_assumed_blockchain_size = 5;
+        m_assumed_chain_state_size = 1;
 
         genesis = CreateGenesisBlock(
             1511954736,
@@ -337,7 +333,7 @@ public:
         bech32HRPs[SAPLING_FULL_VIEWING_KEY]     = "zviewtestsapling";
         bech32HRPs[SAPLING_INCOMING_VIEWING_KEY] = "zivktestsapling";
         bech32HRPs[SAPLING_EXTENDED_SPEND_KEY]   = "secret-extended-key-test";
-        bech32HRPs[SAPLING_EXTENDED_FVK]         = "zxviewregtestsapling";
+        bech32HRPs[SAPLING_EXTENDED_FVK]         = "zxviewtestsapling";
 
         vFixedSeeds = std::vector<SeedSpec6>(pnSeed6_test, pnSeed6_test + ARRAYLEN(pnSeed6_test));
 
@@ -377,8 +373,6 @@ public:
     explicit CRegTestParams(const ArgsManager& args) {
         strNetworkID = "regtest";
         bip44CoinType = 1;
-        consensus.nApproxReleaseHeight = 200000;
-        consensus.fCoinbaseMustBeShielded = false;
         consensus.nSubsidyHalvingInterval = 1500;
         consensus.BIP16Enabled = true;
         consensus.BIP34Enabled = false;
@@ -396,9 +390,9 @@ public:
         consensus.nDigishieldMaxAdjustDown = 0; // Turn off adjustment down
         consensus.nDigishieldMaxAdjustUp = 0; // Turn off adjustment up
 
-        consensus.nZawyLWMAHeight = -1; // Activated on regtest
-        consensus.nZawyLwmaAveragingWindow = 45;
-        consensus.nZawyLwmaAdjustedWeight = 13772;
+        // POW DDA LWMA Parameters
+        consensus.nLwmaForkHeight = -1; // Activated on regtest
+        consensus.nLwmaAveragingWindow = 60;
 
         consensus.nPowTargetSpacing = 10 * 60;
         consensus.fPowAllowMinDifficultyBlocks = true;
@@ -413,13 +407,13 @@ public:
         consensus.vUpgrades[Consensus::UPGRADE_TESTDUMMY].nProtocolVersion = 170004;
         consensus.vUpgrades[Consensus::UPGRADE_TESTDUMMY].nActivationHeight = Consensus::NetworkUpgrade::NO_ACTIVATION_HEIGHT;
         consensus.vUpgrades[Consensus::UPGRADE_OVERWINTER].nProtocolVersion = 170005;
-        consensus.vUpgrades[Consensus::UPGRADE_OVERWINTER].nActivationHeight = Consensus::NetworkUpgrade::NO_ACTIVATION_HEIGHT;
+        consensus.vUpgrades[Consensus::UPGRADE_OVERWINTER].nActivationHeight = 160;
         consensus.vUpgrades[Consensus::UPGRADE_SAPLING].nProtocolVersion = 170007;
-        consensus.vUpgrades[Consensus::UPGRADE_SAPLING].nActivationHeight = Consensus::NetworkUpgrade::NO_ACTIVATION_HEIGHT;
+        consensus.vUpgrades[Consensus::UPGRADE_SAPLING].nActivationHeight = 160;
         const size_t N1 = 48, K1 = 5;
         const size_t N2 = 96, K2 = 5;
-        BOOST_STATIC_ASSERT(equihash_parameters_acceptable(N1, K1));
-        BOOST_STATIC_ASSERT(equihash_parameters_acceptable(N2, K2));
+        static_assert(equihash_parameters_acceptable(N1, K1));
+        static_assert(equihash_parameters_acceptable(N2, K2));
         consensus.nEquihashN1 = N1;
         consensus.nEquihashK1 = K1;
         consensus.nEquihashN2 = N2;
@@ -439,7 +433,7 @@ public:
         pchMessageStart[3] = 0xda;
         nDefaultPort = 49444;
         nPruneAfterHeight = 1000;
-        m_assumed_blockchain_size = 0;
+        m_assumed_blockchain_size = 2;
         m_assumed_chain_state_size = 0;
 
         UpdateActivationParametersFromArgs(args);
@@ -492,18 +486,13 @@ public:
         bech32HRPs[SAPLING_FULL_VIEWING_KEY]     = "zviewregtestsapling";
         bech32HRPs[SAPLING_INCOMING_VIEWING_KEY] = "zivkregtestsapling";
         bech32HRPs[SAPLING_EXTENDED_SPEND_KEY]   = "secret-extended-key-regtest";
-        bech32HRPs[SAPLING_EXTENDED_FVK]         = "zxviews";
+        bech32HRPs[SAPLING_EXTENDED_FVK]         = "zxviewregtestsapling";
     }
 
     void UpdateNetworkUpgradeParameters(Consensus::UpgradeIndex idx, int nActivationHeight)
     {
         assert(idx > Consensus::BASE_SPROUT && idx < Consensus::MAX_NETWORK_UPGRADES);
         consensus.vUpgrades[idx].nActivationHeight = nActivationHeight;
-    }
-
-    void ProtectCoinbase()
-    {
-        consensus.fCoinbaseMustBeShielded = false;
     }
 
     /**
@@ -560,11 +549,6 @@ void CRegTestParams::UpdateActivationParametersFromArgs(const ArgsManager& args)
                 throw std::runtime_error(strprintf("Invalid network upgrade (%s)", vDeploymentParams[0]));
             }
         }
-    }
-
-    if (gArgs.IsArgSet("-protectcoinbase")) {
-        LogPrintf("Enabling coinbase protection.\n");
-        ProtectCoinbase();
     }
 
     if (!args.IsArgSet("-vbparams")) return;

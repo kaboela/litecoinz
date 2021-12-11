@@ -5,8 +5,6 @@
 
 #include <stdexcept>
 
-#include <boost/foreach.hpp>
-
 #include <zcash/IncrementalMerkleTree.hpp>
 #include <crypto/sha256.h>
 #include <zcash/util.h>
@@ -935,17 +933,17 @@ void IncrementalMerkleTree<Depth, Hash>::append(Hash obj) {
         right = obj;
     } else {
         // Combine the leaves and propagate it up the tree
-        boost::optional<Hash> combined = Hash::combine(*left, *right, 0);
+        Optional<Hash> combined = Hash::combine(*left, *right, 0);
 
         // Set the "left" leaf to the object and make the "right" leaf none
         left = obj;
-        right = boost::none;
+        right = nullopt;
 
         for (size_t i = 0; i < Depth; i++) {
             if (i < parents.size()) {
                 if (parents[i]) {
                     combined = Hash::combine(*parents[i], *combined, i+1);
-                    parents[i] = boost::none;
+                    parents[i] = nullopt;
                 } else {
                     parents[i] = *combined;
                     break;
@@ -971,7 +969,7 @@ bool IncrementalMerkleTree<Depth, Hash>::is_complete(size_t depth) const {
         return false;
     }
 
-    BOOST_FOREACH(const boost::optional<Hash>& parent, parents) {
+    for (const Optional<Hash>& parent : parents) {
         if (!parent) {
             return false;
         }
@@ -1002,7 +1000,7 @@ size_t IncrementalMerkleTree<Depth, Hash>::next_depth(size_t skip) const {
 
     size_t d = 1;
 
-    BOOST_FOREACH(const boost::optional<Hash>& parent, parents) {
+    for (const Optional<Hash>& parent : parents) {
         if (!parent) {
             if (skip) {
                 skip--;
@@ -1030,7 +1028,7 @@ Hash IncrementalMerkleTree<Depth, Hash>::root(size_t depth,
 
     size_t d = 1;
 
-    BOOST_FOREACH(const boost::optional<Hash>& parent, parents) {
+    for (const Optional<Hash>& parent : parents) {
         if (parent) {
             root = Hash::combine(*parent, root, d);
         } else {
@@ -1073,7 +1071,7 @@ MerklePath IncrementalMerkleTree<Depth, Hash>::path(std::deque<Hash> filler_hash
 
     size_t d = 1;
 
-    BOOST_FOREACH(const boost::optional<Hash>& parent, parents) {
+    for (const Optional<Hash>& parent : parents) {
         if (parent) {
             index.push_back(true);
             path.push_back(*parent);
@@ -1092,7 +1090,7 @@ MerklePath IncrementalMerkleTree<Depth, Hash>::path(std::deque<Hash> filler_hash
     }
 
     std::vector<std::vector<bool>> merkle_path;
-    BOOST_FOREACH(Hash b, path)
+    for (Hash b : path)
     {
         std::vector<unsigned char> hashv(b.begin(), b.end());
 
@@ -1123,7 +1121,7 @@ void IncrementalWitness<Depth, Hash>::append(Hash obj) {
 
         if (cursor->is_complete(cursor_depth)) {
             filled.push_back(cursor->root(cursor_depth));
-            cursor = boost::none;
+            cursor = nullopt;
         }
     } else {
         cursor_depth = tree.next_depth(filled.size());

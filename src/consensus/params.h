@@ -12,7 +12,7 @@
 #include <map>
 #include <string>
 
-#include <boost/optional.hpp>
+#include <optional.h>
 
 namespace Consensus {
 
@@ -73,7 +73,7 @@ struct NetworkUpgrade {
      * scrutiny than regular releases. nMinimumChainWork MUST be set to at least the chain
      * work of this block, otherwise this detection will have false positives.
      */
-    boost::optional<uint256> hashActivationBlock;
+    Optional<uint256> hashActivationBlock;
 };
 
 enum DeploymentPos
@@ -117,8 +117,6 @@ struct Params {
 
     uint256 hashGenesisBlock;
 
-    bool fCoinbaseMustBeShielded;
-
     int nSubsidyHalvingInterval;
     /* BIP16 rule */
     bool BIP16Enabled;
@@ -148,11 +146,12 @@ struct Params {
     uint32_t nMinerConfirmationWindow;
     BIP9Deployment vDeployments[MAX_VERSION_BITS_DEPLOYMENTS];
 
-    /** Block height at which Zawy's LWMA difficulty algorithm becomes active */
-    int nZawyLWMAHeight;
-
     /** Block height where Equihash<144,5> becomes active */
     int nEquihashForkHeight;
+
+    /** Block height at which Zawy's LWMA difficulty algorithm becomes active */
+    int nLwmaForkHeight;
+
     /** Proof of work parameters */
     unsigned int nEquihashN1 = 0;
     unsigned int nEquihashK1 = 0;
@@ -187,19 +186,14 @@ struct Params {
     int64_t DigishieldMinActualTimespan() const { return (DigishieldAveragingWindowTimespan() * (100 - nDigishieldMaxAdjustUp  )) / 100; }
     int64_t DigishieldMaxActualTimespan() const { return (DigishieldAveragingWindowTimespan() * (100 + nDigishieldMaxAdjustDown)) / 100; }
 
-    // Params for Zawy's LWMA difficulty adjustment algorithm.
-    int64_t nZawyLwmaAveragingWindow;
-    int64_t nZawyLwmaAdjustedWeight;  // k = (N+1)/2 * 0.998 * T
-    int64_t nZawyLwmaMinDenominator;
-    bool bZawyLwmaSolvetimeLimitation;
+    // Params for Lwma difficulty adjustment algorithm.
+    int64_t nLwmaAveragingWindow;
 
     int64_t nPowTargetSpacing;
     uint256 nMinimumChainWork;
     uint256 defaultAssumeValid;
 
     NetworkUpgrade vUpgrades[MAX_NETWORK_UPGRADES];
-
-    int nApproxReleaseHeight;
 };
 } // namespace Consensus
 

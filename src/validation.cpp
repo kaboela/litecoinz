@@ -17,7 +17,6 @@
 #include <consensus/upgrades.h>
 #include <consensus/validation.h>
 #include <cuckoocache.h>
-#include <deprecation.h>
 #include <flatfile.h>
 #include <hash.h>
 #include <index/txindex.h>
@@ -124,7 +123,6 @@ bool fPruneMode = false;
 bool fRequireStandard = true;
 bool fCheckBlockIndex = false;
 bool fCheckpointsEnabled = DEFAULT_CHECKPOINTS_ENABLED;
-bool fCoinbaseEnforcedShieldingEnabled = true;
 size_t nCoinCacheUsage = 5000 * 300;
 uint64_t nPruneTarget = 0;
 int64_t nMaxTipAge = DEFAULT_MAX_TIP_AGE;
@@ -581,12 +579,6 @@ bool MemPoolAccept::PreChecks(ATMPArgs& args, Workspace& ws)
     if (!ContextualCheckTransaction(tx, state, nextBlockHeight))
         return false;
 
-    // DoS mitigation: reject transactions expiring soon
-    // Note that if a valid transaction belonging to the wallet is in the mempool and the node is shutdown,
-    // upon restart, CWalletTx::AcceptToMemoryPool() will be invoked which might result in rejection.
-    if (IsExpiringSoonTx(tx, nextBlockHeight))
-        return state.Invalid(ValidationInvalidReason::TX_MEMPOOL_POLICY, false, REJECT_EXPIRINGSOON, "tx-expiring-soon");
-
     // Coinbase is only valid in a block, not as a loose transaction
     if (tx.IsCoinBase())
         return state.Invalid(ValidationInvalidReason::CONSENSUS, false, REJECT_INVALID, "coinbase");
@@ -719,8 +711,9 @@ bool MemPoolAccept::PreChecks(ATMPArgs& args, Workspace& ws)
     }
 
     // Check for non-standard pay-to-script-hash in inputs
-    if (fRequireStandard && !AreInputsStandard(tx, m_view, consensusBranchId))
-        return state.Invalid(ValidationInvalidReason::TX_NOT_STANDARD, false, REJECT_NONSTANDARD, "bad-txns-nonstandard-inputs");
+    if (fRequireStandard && !AreInputsStandard(tx, m_view, consensusBranchId)) {
+        return state.Invalid(ValidationInvalidReason::TX_INPUTS_NOT_STANDARD, false, REJECT_NONSTANDARD, "bad-txns-nonstandard-inputs");
+    }
 
     // Check for non-standard witness in P2WSH
     if (tx.HasWitness() && fRequireStandard && !IsWitnessStandard(tx, m_view, consensusBranchId))
@@ -2196,7 +2189,7 @@ bool CChainState::ConnectBlock(const CBlock& block, CValidationState& state, CBl
         // Sapling
         //
         // If we've reached ConnectBlock, we have all transactions of
-        // parents and can expect nChainSaplingValue not to be boost::none.
+        // parents and can expect nChainSaplingValue not to be nullopt.
         // However, the miner and mining RPCs may not have populated this
         // value and will call `TestBlockValidity`. So, we act
         // conditionally.
@@ -3009,10 +3002,6 @@ bool CChainState::ConnectTip(CValidationState& state, const CChainParams& chainp
     // Remove conflicting transactions from the mempool.;
     mempool.removeForBlock(blockConnecting.vtx, pindexNew->nHeight);
     disconnectpool.removeForBlock(blockConnecting.vtx);
-
-    // Remove transactions that expire at new block height from mempool
-    mempool.removeExpired(pindexNew->nHeight);
-
     // Update m_chain & related variables.
     m_chain.SetTip(pindexNew);
     UpdateTip(pindexNew, chainparams);
@@ -3022,9 +3011,6 @@ bool CChainState::ConnectTip(CValidationState& state, const CChainParams& chainp
     LogPrint(BCLog::BENCH, "- Connect block: %.2fms [%.2fs (%.2fms/blk)]\n", (nTime6 - nTime1) * MILLI, nTimeTotal * MICRO, nTimeTotal * MILLI / nBlocksTotal);
 
     connectTrace.BlockConnected(pindexNew, std::move(pthisBlock));
-
-    CDeprecation deprecation = CDeprecation(Params().GetConsensus().nApproxReleaseHeight);
-    deprecation.EnforceNodeDeprecation(pindexNew->nHeight);
 
     return true;
 }
@@ -3596,7 +3582,7 @@ void FallbackSproutValuePoolBalance(CBlockIndex *pindex, const CChainParams& cha
                 assert(*pindex->nChainSproutValue == chainparams.SproutValuePoolCheckpointBalance());
                 // And we should expect non-none for the delta stored in the block index here,
                 // or the checkpoint is too early.
-                assert(pindex->nSproutValue != boost::none);
+                assert(pindex->nSproutValue != nullopt);
             }
         } else {
             LogPrintf(
@@ -3627,9 +3613,9 @@ void CChainState::ReceivedBlockTransactions(const CBlock& block, CBlockIndex* pi
         }
     }
     pindexNew->nSproutValue = sproutValue;
-    pindexNew->nChainSproutValue = boost::none;
+    pindexNew->nChainSproutValue = nullopt;
     pindexNew->nSaplingValue = saplingValue;
-    pindexNew->nChainSaplingValue = boost::none;
+    pindexNew->nChainSaplingValue = nullopt;
     pindexNew->nCachedBranchId = CurrentEpochBranchId(pindexNew->nHeight, consensusParams);
     pindexNew->nFile = pos.nFile;
     pindexNew->nDataPos = pos.nPos;
@@ -3656,12 +3642,12 @@ void CChainState::ReceivedBlockTransactions(const CBlock& block, CBlockIndex* pi
                 if (pindex->pprev->nChainSproutValue && pindex->nSproutValue) {
                     pindex->nChainSproutValue = *pindex->pprev->nChainSproutValue + *pindex->nSproutValue;
                 } else {
-                    pindex->nChainSproutValue = boost::none;
+                    pindex->nChainSproutValue = nullopt;
                 }
                 if (pindex->pprev->nChainSaplingValue) {
                     pindex->nChainSaplingValue = *pindex->pprev->nChainSaplingValue + pindex->nSaplingValue;
                 } else {
-                    pindex->nChainSaplingValue = boost::none;
+                    pindex->nChainSaplingValue = nullopt;
                 }
             } else {
                 pindex->nChainSproutValue = pindex->nSproutValue;
@@ -4603,17 +4589,17 @@ bool BlockManager::LoadBlockIndex(
                     if (pindex->pprev->nChainSproutValue && pindex->nSproutValue) {
                         pindex->nChainSproutValue = *pindex->pprev->nChainSproutValue + *pindex->nSproutValue;
                     } else {
-                        pindex->nChainSproutValue = boost::none;
+                        pindex->nChainSproutValue = nullopt;
                     }
                     if (pindex->pprev->nChainSaplingValue) {
                         pindex->nChainSaplingValue = *pindex->pprev->nChainSaplingValue + pindex->nSaplingValue;
                     } else {
-                        pindex->nChainSaplingValue = boost::none;
+                        pindex->nChainSaplingValue = nullopt;
                     }
                 } else {
                     pindex->nChainTx = 0;
-                    pindex->nChainSproutValue = boost::none;
-                    pindex->nChainSaplingValue = boost::none;
+                    pindex->nChainSproutValue = nullopt;
+                    pindex->nChainSaplingValue = nullopt;
                     m_blocks_unlinked.insert(std::make_pair(pindex->pprev, pindex));
                 }
             } else {
@@ -4775,9 +4761,6 @@ bool CChainState::LoadChainTip(const CChainParams& chainparams)
         m_chain.Height(),
         FormatISO8601DateTime(tip->GetBlockTime()),
         GuessVerificationProgress(chainparams.TxData(), tip));
-
-    CDeprecation deprecation = CDeprecation(Params().GetConsensus().nApproxReleaseHeight);
-    deprecation.EnforceNodeDeprecation(m_chain.Height(), true);
 
     return true;
 }

@@ -1069,6 +1069,7 @@ static bool MaybePunishNode(NodeId nodeid, const CValidationState& state, bool v
         return true;
     case ValidationInvalidReason::RECENT_CONSENSUS_CHANGE:
     case ValidationInvalidReason::BLOCK_TIME_FUTURE:
+    case ValidationInvalidReason::TX_INPUTS_NOT_STANDARD:
     case ValidationInvalidReason::TX_NOT_STANDARD:
     case ValidationInvalidReason::TX_MISSING_INPUTS:
     case ValidationInvalidReason::TX_PREMATURE_SPEND:
@@ -1549,31 +1550,20 @@ void static ProcessGetData(CNode* pfrom, const CChainParams& chainparams, CConnm
             const CInv &inv = *it;
             it++;
 
-            // Check the mempool to see if a transaction is expiring soon.  If so, do not send to peer.
-            // Note that a transaction enters the mempool first, before the serialized form is cached
-            // in mapRelay after a successful relay.
-            bool isExpiringSoon = false;
-
-            std::shared_ptr<const CTransaction> ptx = mempool.get(inv.hash);
-            if (ptx)
-                isExpiringSoon = IsExpiringSoonTx(*ptx, ::ChainActive().Height() + 1);
-
             // Send stream from relay memory
             bool push = false;
-            if (!isExpiringSoon) {
-                auto mi = mapRelay.find(inv.hash);
-                int nSendFlags = (inv.type == MSG_TX ? SERIALIZE_TRANSACTION_NO_WITNESS : 0);
-                if (mi != mapRelay.end()) {
-                    connman->PushMessage(pfrom, msgMaker.Make(nSendFlags, NetMsgType::TX, *mi->second));
+            auto mi = mapRelay.find(inv.hash);
+            int nSendFlags = (inv.type == MSG_TX ? SERIALIZE_TRANSACTION_NO_WITNESS : 0);
+            if (mi != mapRelay.end()) {
+                connman->PushMessage(pfrom, msgMaker.Make(nSendFlags, NetMsgType::TX, *mi->second));
+                push = true;
+            } else if (pfrom->m_tx_relay->timeLastMempoolReq) {
+                auto txinfo = mempool.info(inv.hash);
+                // To protect privacy, do not answer getdata using the mempool when
+                // that TX couldn't have been INVed in reply to a MEMPOOL request.
+                if (txinfo.tx && txinfo.nTime <= pfrom->m_tx_relay->timeLastMempoolReq) {
+                    connman->PushMessage(pfrom, msgMaker.Make(nSendFlags, NetMsgType::TX, *txinfo.tx));
                     push = true;
-                } else if (pfrom->m_tx_relay->timeLastMempoolReq) {
-                    auto txinfo = mempool.info(inv.hash);
-                    // To protect privacy, do not answer getdata using the mempool when
-                    // that TX couldn't have been INVed in reply to a MEMPOOL request.
-                    if (txinfo.tx && txinfo.nTime <= pfrom->m_tx_relay->timeLastMempoolReq) {
-                        connman->PushMessage(pfrom, msgMaker.Make(nSendFlags, NetMsgType::TX, *txinfo.tx));
-                        push = true;
-                    }
                 }
             }
             if (!push) {
@@ -1871,10 +1861,15 @@ void static ProcessOrphanTx(CConnman* connman, std::set<uint256>& orphan_work_se
             // Probably non-standard or insufficient fee
             LogPrint(BCLog::MEMPOOL, "   removed orphan tx %s\n", orphanHash.ToString());
             assert(IsTransactionReason(orphan_state.GetReason()));
-            if (!orphanTx.HasWitness() && orphan_state.GetReason() != ValidationInvalidReason::TX_WITNESS_MUTATED) {
+            if ((!orphanTx.HasWitness() && orphan_state.GetReason() != ValidationInvalidReason::TX_WITNESS_MUTATED) ||
+                orphan_state.GetReason() == ValidationInvalidReason::TX_INPUTS_NOT_STANDARD) {
                 // Do not use rejection cache for witness transactions or
                 // witness-stripped transactions, as they can have been malleated.
                 // See https://github.com/bitcoin/bitcoin/issues/8279 for details.
+                // However, if the transaction failed for TX_INPUTS_NOT_STANDARD,
+                // then we know that the witness was irrelevant to the policy
+                // failure, since this check depends only on the txid
+                // (the scriptPubKey being spent is covered by the txid).
                 assert(recentRejects);
                 recentRejects->insert(orphanHash);
             }
@@ -2600,10 +2595,15 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
             }
         } else {
             assert(IsTransactionReason(state.GetReason()));
-            if (!tx.HasWitness() && state.GetReason() != ValidationInvalidReason::TX_WITNESS_MUTATED) {
+            if ((!tx.HasWitness() && state.GetReason() != ValidationInvalidReason::TX_WITNESS_MUTATED) ||
+                    state.GetReason() == ValidationInvalidReason::TX_INPUTS_NOT_STANDARD) {
                 // Do not use rejection cache for witness transactions or
                 // witness-stripped transactions, as they can have been malleated.
                 // See https://github.com/bitcoin/bitcoin/issues/8279 for details.
+                // However, if the transaction failed for TX_INPUTS_NOT_STANDARD,
+                // then we know that the witness was irrelevant to the policy
+                // failure, since this check depends only on the txid
+                // (the scriptPubKey being spent is covered by the txid).
                 assert(recentRejects);
                 recentRejects->insert(tx.GetHash());
                 if (RecursiveDynamicUsage(*ptx) < 100000) {
@@ -3865,9 +3865,6 @@ bool PeerLogicValidation::SendMessages(CNode* pto)
                             if (txinfo.feeRate.GetFeePerK() < filterrate)
                                 continue;
                         }
-                        if (IsExpiringSoonTx(*txinfo.tx, ::ChainActive().Height() + 1))
-                            continue;
-
                         if (pto->m_tx_relay->pfilter) {
                             if (!pto->m_tx_relay->pfilter->IsRelevantAndUpdate(*txinfo.tx)) continue;
                         }

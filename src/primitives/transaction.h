@@ -548,7 +548,7 @@ public:
      * transactions they are spent in. This is the same security semantics as
      * for transparent addresses.
      */
-    boost::optional<uint256> nullifier;
+    Optional<uint256> nullifier;
 
     /**
      * Cached incremental witnesses for spendable Notes.
@@ -613,7 +613,7 @@ public:
 
     libzcash::SaplingIncomingViewingKey ivk;
     int witnessHeight;
-    boost::optional<uint256> nullifier;
+    Optional<uint256> nullifier;
 
     std::list<SaplingWitness> witnesses;
 
@@ -1068,10 +1068,5 @@ template <typename Tx> static inline CTransactionRef MakeTransactionRef(Tx&& txI
 
 /** Return a CMutableTransaction with contextual default values based on set of consensus rules at nHeight. */
 CMutableTransaction CreateNewContextualCMutableTransaction(const Consensus::Params& consensusParams, int nHeight);
-
-/** Default for -txexpirydelta, in number of blocks */
-static const unsigned int DEFAULT_TX_EXPIRY_DELTA = 20;
-/** The number of blocks within expiry height when a tx is considered to be expiring soon */
-static constexpr uint32_t TX_EXPIRING_SOON_THRESHOLD = 3;
 
 #endif // BITCOIN_PRIMITIVES_TRANSACTION_H
