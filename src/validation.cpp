@@ -17,7 +17,6 @@
 #include <consensus/upgrades.h>
 #include <consensus/validation.h>
 #include <cuckoocache.h>
-#include <deprecation.h>
 #include <flatfile.h>
 #include <hash.h>
 #include <index/txindex.h>
@@ -580,12 +579,6 @@ bool MemPoolAccept::PreChecks(ATMPArgs& args, Workspace& ws)
     // Check transaction contextually against the set of consensus rules which apply in the next block to be mined.
     if (!ContextualCheckTransaction(tx, state, nextBlockHeight))
         return false;
-
-    // DoS mitigation: reject transactions expiring soon
-    // Note that if a valid transaction belonging to the wallet is in the mempool and the node is shutdown,
-    // upon restart, CWalletTx::AcceptToMemoryPool() will be invoked which might result in rejection.
-    if (IsExpiringSoonTx(tx, nextBlockHeight))
-        return state.Invalid(ValidationInvalidReason::TX_MEMPOOL_POLICY, false, REJECT_EXPIRINGSOON, "tx-expiring-soon");
 
     // Coinbase is only valid in a block, not as a loose transaction
     if (tx.IsCoinBase())
@@ -2884,10 +2877,7 @@ bool CChainState::DisconnectTip(CValidationState& state, const CChainParams& cha
     UpdateTip(pindexDelete->pprev, chainparams);
     // Let wallets know transactions went from 1-confirmed to
     // 0-confirmed or conflicted:
-    GetMainSignals().BlockDisconnected(pblock);
-
-    // Update cached incremental witnesses
-    GetMainSignals().ChainTip(pblock, pindexDelete, false);
+    GetMainSignals().BlockDisconnected(pblock, pindexDelete);
 
     return true;
 }
@@ -3009,10 +2999,6 @@ bool CChainState::ConnectTip(CValidationState& state, const CChainParams& chainp
     // Remove conflicting transactions from the mempool.;
     mempool.removeForBlock(blockConnecting.vtx, pindexNew->nHeight);
     disconnectpool.removeForBlock(blockConnecting.vtx);
-
-    // Remove transactions that expire at new block height from mempool
-    mempool.removeExpired(pindexNew->nHeight);
-
     // Update m_chain & related variables.
     m_chain.SetTip(pindexNew);
     UpdateTip(pindexNew, chainparams);
@@ -3022,9 +3008,6 @@ bool CChainState::ConnectTip(CValidationState& state, const CChainParams& chainp
     LogPrint(BCLog::BENCH, "- Connect block: %.2fms [%.2fs (%.2fms/blk)]\n", (nTime6 - nTime1) * MILLI, nTimeTotal * MICRO, nTimeTotal * MILLI / nBlocksTotal);
 
     connectTrace.BlockConnected(pindexNew, std::move(pthisBlock));
-
-    CDeprecation deprecation = CDeprecation(Params().GetConsensus().nApproxReleaseHeight);
-    deprecation.EnforceNodeDeprecation(pindexNew->nHeight);
 
     return true;
 }
@@ -3286,9 +3269,6 @@ bool CChainState::ActivateBestChain(CValidationState &state, const CChainParams&
                 for (const PerBlockConnectTrace& trace : connectTrace.GetBlocksConnected()) {
                     assert(trace.pblock && trace.pindex);
                     GetMainSignals().BlockConnected(trace.pblock, trace.pindex, trace.conflictedTxs);
-
-                    // Update cached incremental witnesses
-                    GetMainSignals().ChainTip(trace.pblock, trace.pindex, true);
                 }
             } while (!m_chain.Tip() || (starting_tip && CBlockIndexWorkComparator()(m_chain.Tip(), starting_tip)));
             if (!blocks_connected) return true;
@@ -4775,9 +4755,6 @@ bool CChainState::LoadChainTip(const CChainParams& chainparams)
         m_chain.Height(),
         FormatISO8601DateTime(tip->GetBlockTime()),
         GuessVerificationProgress(chainparams.TxData(), tip));
-
-    CDeprecation deprecation = CDeprecation(Params().GetConsensus().nApproxReleaseHeight);
-    deprecation.EnforceNodeDeprecation(m_chain.Height(), true);
 
     return true;
 }

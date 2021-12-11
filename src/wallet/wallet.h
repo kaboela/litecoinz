@@ -102,7 +102,7 @@ static constexpr size_t DUMMY_NESTED_P2WPKH_INPUT_SIZE = 91;
 //! Size of witness cache
 //  Should be large enough that we can expect not to reorg beyond our cache
 //  unless there is some exceptional network disruption.
-static const int WITNESS_CACHE_SIZE = COINBASE_MATURITY;
+static const unsigned int WITNESS_CACHE_SIZE = COINBASE_MATURITY;
 
 //! Size of HD seed in bytes
 static const size_t HD_WALLET_SEED_LENGTH = 32;
@@ -137,10 +137,10 @@ enum WalletFeature
 };
 
 //! Default for -addresstype
-constexpr OutputType DEFAULT_ADDRESS_TYPE{OutputType::BECH32};
+constexpr OutputType DEFAULT_ADDRESS_TYPE{OutputType::LEGACY};
 
 //! Default for -changetype
-constexpr OutputType DEFAULT_CHANGE_TYPE{OutputType::CHANGE_AUTO};
+constexpr OutputType DEFAULT_CHANGE_TYPE{OutputType::LEGACY};
 
 enum WalletFlags : uint64_t {
     // wallet flags in the upper section (> 1 << 31) will lead to not opening the wallet if flag is unknown
@@ -908,9 +908,6 @@ private:
     TxNullifiers mapTxSproutNullifiers GUARDED_BY(cs_wallet);
     TxNullifiers mapTxSaplingNullifiers GUARDED_BY(cs_wallet);
 
-    std::vector<CTransactionRef> pendingSaplingMigrationTxs GUARDED_BY(cs_wallet);
-    AsyncRPCOperationId saplingMigrationOperationId;
-
     void AddToTransparentSpends(const COutPoint& outpoint, const uint256& wtxid) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
     void AddToSproutSpends(const uint256& nullifier, const uint256& wtxid) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
     void AddToSaplingSpends(const uint256& nullifier, const uint256& wtxid) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
@@ -924,20 +921,16 @@ public:
      */
     int64_t nWitnessCacheSize = 0;
 
-    bool fSaplingMigrationEnabled = false;
-
     void ClearNoteWitnessCache();
 
 protected:
-
-    int SproutWitnessMinimumHeight(interfaces::Chain::Lock& locked_chain, const uint256& nullifier, int nWitnessHeight, int nMinimumHeight) const;
-    int SaplingWitnessMinimumHeight(interfaces::Chain::Lock& locked_chain, const uint256& nullifier, int nWitnessHeight, int nMinimumHeight) const;
-
     /**
      * pindex is the new tip being connected.
      */
-    int VerifyAndSetInitialWitness(const CBlockIndex* pindex, bool witnessOnly) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
-    void BuildWitnessCache(const CBlockIndex* pindex, bool witnessOnly) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
+    void IncrementNoteWitnesses(const CBlockIndex* pindex,
+                                const CBlock* pblock,
+                                SproutMerkleTree& sproutTree,
+                                SaplingMerkleTree& saplingTree) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
     /**
      * pindex is the old tip being disconnected.
      */
@@ -973,7 +966,7 @@ private:
     void SyncTransaction(const CTransactionRef& tx, CWalletTx::Status status, const uint256& block_hash, int posInBlock = 0, bool update_tx = true) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
 
     /* Update cached incremental witnesses when the active block chain tip changes */
-    void ChainTip(const CBlock& block, const CBlockIndex *pindex, bool added) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet) override;
+    void ChainTip(const CBlock& block, const CBlockIndex *pindex, SproutMerkleTree sproutTree, SaplingMerkleTree saplingTree, bool added) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
 
     /* the HD chain data model (external chain counters) */
     CHDChain hdChain;
@@ -1251,9 +1244,6 @@ public:
     bool IsSproutSpent(interfaces::Chain::Lock& locked_chain, const uint256& nullifier) const EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
     bool IsSaplingSpent(interfaces::Chain::Lock& locked_chain, const uint256& nullifier) const EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
 
-    int GetSproutSpendDepth(interfaces::Chain::Lock& locked_chain, const uint256& nullifier) const EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
-    int GetSaplingSpendDepth(interfaces::Chain::Lock& locked_chain, const uint256& nullifier) const EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
-
     // Whether this or any known UTXO with the same single key has been spent.
     bool IsUsedDestination(const uint256& hash, unsigned int n) const EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
     void SetUsedDestinationState(const uint256& hash, unsigned int n, bool used, std::set<CTxDestination>& tx_destinations);
@@ -1424,8 +1414,8 @@ public:
     bool AddToWallet(const CWalletTx& wtxIn, bool fFlushOnClose=true);
     void LoadToWallet(CWalletTx& wtxIn) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
     void TransactionAddedToMempool(const CTransactionRef& tx) override;
-    void BlockConnected(const CBlock& block, const std::vector<CTransactionRef>& vtxConflicted) override;
-    void BlockDisconnected(const CBlock& block) override;
+    void BlockConnected(const CBlock& block, const CBlockIndex *pindex, const std::vector<CTransactionRef>& vtxConflicted) override;
+    void BlockDisconnected(const CBlock& block, const CBlockIndex *pindex) override;
     void UpdatedBlockTip() override;
     int64_t RescanFromTime(int64_t startTime, const WalletRescanReserver& reserver, bool update);
 
@@ -1444,10 +1434,6 @@ public:
         //! USER_ABORT.
         uint256 last_failed_block;
     };
-
-    void WitnessNoteCommitment(std::vector<uint256> commitments,
-                               std::vector<boost::optional<SproutWitness>>& witnesses,
-                               uint256 &final_anchor);
 
     ScanResult ScanForWalletTransactions(const uint256& first_block, const uint256& last_block, const WalletRescanReserver& reserver, bool fUpdate);
     void TransactionRemovedFromMempool(const CTransactionRef &ptx) override;
@@ -1615,9 +1601,6 @@ public:
     std::set<std::pair<libzcash::PaymentAddress, uint256>> GetNullifiersForAddresses(const std::set<libzcash::PaymentAddress>& addresses);
     bool IsNoteSproutChange(const std::set<std::pair<libzcash::PaymentAddress, uint256>>& nullifierSet, const libzcash::PaymentAddress& address, const SproutOutPoint& entry);
     bool IsNoteSaplingChange(const std::set<std::pair<libzcash::PaymentAddress, uint256>>& nullifierSet, const libzcash::PaymentAddress& address, const SaplingOutPoint& entry);
-    /** Sapling migration */
-    void RunSaplingMigration(int blockHeight);
-    void AddPendingSaplingMigrationTx(const CTransactionRef& tx);
 
     DBErrors LoadWallet(bool& fFirstRunRet);
     DBErrors ZapWalletTx(std::vector<CWalletTx>& vWtx);

@@ -175,15 +175,11 @@ public:
         const CBlockIndex* index,
         const std::vector<CTransactionRef>& tx_conflicted) override
     {
-        m_notifications->BlockConnected(*block, tx_conflicted);
+        m_notifications->BlockConnected(*block, index, tx_conflicted);
     }
-    void BlockDisconnected(const std::shared_ptr<const CBlock>& block) override
+    void BlockDisconnected(const std::shared_ptr<const CBlock>& block, const CBlockIndex *pindex) override
     {
-        m_notifications->BlockDisconnected(*block);
-    }
-    void ChainTip(const std::shared_ptr<const CBlock>& block, const CBlockIndex* pindex, bool added) override
-    {
-        m_notifications->ChainTip(*block, pindex, added);
+        m_notifications->BlockDisconnected(*block, pindex);
     }
     void UpdatedBlockTip(const CBlockIndex* index, const CBlockIndex* fork_index, bool is_ibd) override
     {
