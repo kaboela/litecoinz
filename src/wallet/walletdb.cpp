@@ -422,9 +422,9 @@ ReadKeyValue(CWallet* pwallet, CDataStream& ssKey, CDataStream& ssValue,
             libzcash::SproutSpendingKey key;
             ssValue >> key;
 
-            if (!pwallet->LoadZKey(key))
+            if (!pwallet->LoadSproutKey(key))
             {
-                strErr = "Error reading wallet database: LoadZKey failed";
+                strErr = "Error reading wallet database: LoadSproutKey failed";
                 return false;
             }
 
@@ -435,9 +435,9 @@ ReadKeyValue(CWallet* pwallet, CDataStream& ssKey, CDataStream& ssValue,
             libzcash::SaplingExtendedSpendingKey key;
             ssValue >> key;
 
-            if (!pwallet->LoadSaplingZKey(key))
+            if (!pwallet->LoadSaplingKey(key))
             {
-                strErr = "Error reading wallet database: LoadSaplingZKey failed";
+                strErr = "Error reading wallet database: LoadSaplingKey failed";
                 return false;
             }
             wss.nSaplingKeys++;
@@ -483,9 +483,9 @@ ReadKeyValue(CWallet* pwallet, CDataStream& ssKey, CDataStream& ssValue,
             ssValue >> vchCryptedSecret;
             wss.nSproutCKeys++;
 
-            if (!pwallet->LoadCryptedZKey(addr, rk, vchCryptedSecret))
+            if (!pwallet->LoadCryptedSproutKey(addr, rk, vchCryptedSecret))
             {
-                strErr = "Error reading wallet database: LoadCryptedZKey failed";
+                strErr = "Error reading wallet database: LoadCryptedSproutKey failed";
                 return false;
             }
             wss.fIsEncrypted = true;
@@ -498,9 +498,9 @@ ReadKeyValue(CWallet* pwallet, CDataStream& ssKey, CDataStream& ssValue,
             ssValue >> vchCryptedSecret;
             wss.nSaplingCKeys++;
 
-            if (!pwallet->LoadCryptedSaplingZKey(extfvk, vchCryptedSecret))
+            if (!pwallet->LoadCryptedSaplingKey(extfvk, vchCryptedSecret))
             {
-                strErr = "Error reading wallet database: LoadCryptedSaplingZKey failed";
+                strErr = "Error reading wallet database: LoadCryptedSaplingKey failed";
                 return false;
             }
             wss.fIsEncrypted = true;
@@ -517,17 +517,14 @@ ReadKeyValue(CWallet* pwallet, CDataStream& ssKey, CDataStream& ssValue,
             CKeyMetadata keyMeta;
             ssValue >> keyMeta;
             wss.nSproutKeyMeta++;
-
-            pwallet->LoadZKeyMetadata(addr, keyMeta);
+            pwallet->LoadSproutKeyMetadata(addr, keyMeta);
         } else if (strType == DBKeys::SAPLING_KEYMETA) {
             libzcash::SaplingIncomingViewingKey ivk;
             ssKey >> ivk;
             CKeyMetadata keyMeta;
             ssValue >> keyMeta;
-
             wss.nSaplingKeyMeta++;
-
-            pwallet->LoadSaplingZKeyMetadata(ivk, keyMeta);
+            pwallet->LoadSaplingKeyMetadata(ivk, keyMeta);
         } else if (strType == DBKeys::SAPLING_ADDRESS) {
             libzcash::SaplingPaymentAddress addr;
             ssKey >> addr;
@@ -1045,7 +1042,7 @@ bool WalletBatch::WriteZecHDChain(const CZecHDChain& chain)
     return WriteIC(DBKeys::ZEC_HDCHAIN, chain);
 }
 
-bool WalletBatch::WriteZKey(const libzcash::SproutPaymentAddress& addr, const libzcash::SproutSpendingKey& key, const CKeyMetadata &keyMeta)
+bool WalletBatch::WriteSproutKey(const libzcash::SproutPaymentAddress& addr, const libzcash::SproutSpendingKey& key, const CKeyMetadata &keyMeta)
 {
     if (!WriteIC(std::make_pair(DBKeys::SPROUT_KEYMETA, addr), keyMeta))
         return false;
@@ -1054,7 +1051,7 @@ bool WalletBatch::WriteZKey(const libzcash::SproutPaymentAddress& addr, const li
     return WriteIC(std::make_pair(DBKeys::SPROUT_KEY, addr), key, false);
 }
 
-bool WalletBatch::WriteSaplingZKey(const libzcash::SaplingIncomingViewingKey &ivk, const libzcash::SaplingExtendedSpendingKey &key, const CKeyMetadata  &keyMeta)
+bool WalletBatch::WriteSaplingKey(const libzcash::SaplingIncomingViewingKey &ivk, const libzcash::SaplingExtendedSpendingKey &key, const CKeyMetadata  &keyMeta)
 {
     if (!WriteIC(std::make_pair(DBKeys::SAPLING_KEYMETA, ivk), keyMeta))
         return false;
@@ -1067,7 +1064,7 @@ bool WalletBatch::WriteSaplingPaymentAddress(const libzcash::SaplingPaymentAddre
     return WriteIC(std::make_pair(DBKeys::SAPLING_ADDRESS, addr), ivk, false);
 }
 
-bool WalletBatch::WriteCryptedZKey(const libzcash::SproutPaymentAddress & addr,
+bool WalletBatch::WriteCryptedSproutKey(const libzcash::SproutPaymentAddress & addr,
                                    const libzcash::ReceivingKey & rk,
                                    const std::vector<unsigned char>& vchCryptedSecret,
                                    const CKeyMetadata &keyMeta)
@@ -1083,9 +1080,9 @@ bool WalletBatch::WriteCryptedZKey(const libzcash::SproutPaymentAddress & addr,
     return true;
 }
 
-bool WalletBatch::WriteCryptedSaplingZKey(const libzcash::SaplingExtendedFullViewingKey &extfvk,
-                                          const std::vector<unsigned char>& vchCryptedSecret,
-                                          const CKeyMetadata &keyMeta)
+bool WalletBatch::WriteCryptedSaplingKey(const libzcash::SaplingExtendedFullViewingKey &extfvk,
+                                         const std::vector<unsigned char>& vchCryptedSecret,
+                                         const CKeyMetadata &keyMeta)
 {
     auto ivk = extfvk.fvk.in_viewing_key();
 

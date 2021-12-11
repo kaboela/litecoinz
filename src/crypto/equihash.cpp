@@ -30,7 +30,7 @@
 #include <iostream>
 #include <stdexcept>
 
-#include <boost/optional.hpp>
+#include <optional.h>
 
 static EhSolverCancelledException solver_cancelled;
 
@@ -147,7 +147,7 @@ void CompressArray(const unsigned char* in, size_t in_len,
 // comparison
 void EhIndexToArray(const eh_index i, unsigned char* array)
 {
-    BOOST_STATIC_ASSERT(sizeof(eh_index) == 4);
+    static_assert(sizeof(eh_index) == 4);
     eh_index bei = htobe32(i);
     memcpy(array, &bei, sizeof(eh_index));
 }
@@ -156,7 +156,7 @@ void EhIndexToArray(const eh_index i, unsigned char* array)
 // comparison
 eh_index ArrayToEhIndex(const unsigned char* array)
 {
-    BOOST_STATIC_ASSERT(sizeof(eh_index) == 4);
+    static_assert(sizeof(eh_index) == 4);
     eh_index bei;
     memcpy(&bei, array, sizeof(eh_index));
     return be32toh(bei);
@@ -165,7 +165,7 @@ eh_index ArrayToEhIndex(const unsigned char* array)
 eh_trunc TruncateIndex(const eh_index i, const unsigned int ilen)
 {
     // Truncate to 8 bits
-    BOOST_STATIC_ASSERT(sizeof(eh_trunc) == 1);
+    static_assert(sizeof(eh_trunc) == 1);
     return (i >> (ilen - 8)) & 0xff;
 }
 
@@ -219,7 +219,7 @@ StepRow<WIDTH>::StepRow(const unsigned char* hashIn, size_t hInLen,
 template<size_t WIDTH> template<size_t W>
 StepRow<WIDTH>::StepRow(const StepRow<W>& a)
 {
-    BOOST_STATIC_ASSERT(W <= WIDTH);
+    static_assert(W <= WIDTH);
     std::copy(a.hash, a.hash+W, hash);
 }
 
@@ -641,7 +641,7 @@ bool Equihash<N,K>::OptimisedSolve(const eh_HashState& base_state,
         size_t hashLen;
         size_t lenIndices;
         unsigned char tmpHash[HashOutput];
-        std::vector<boost::optional<std::vector<FullStepRow<FinalFullWidth>>>> X;
+        std::vector<Optional<std::vector<FullStepRow<FinalFullWidth>>>> X;
         X.reserve(K+1);
 
         // 3) Repeat steps 1 and 2 for each partial index
@@ -659,7 +659,7 @@ bool Equihash<N,K>::OptimisedSolve(const eh_HashState& base_state,
                                  N/8, HashLength, CollisionBitLength, newIndex);
                 if (cancelled(PartialGeneration)) throw solver_cancelled;
             }
-            boost::optional<std::vector<FullStepRow<FinalFullWidth>>> ic = icv;
+            Optional<std::vector<FullStepRow<FinalFullWidth>>> ic = icv;
 
             // 2a) For each pair of lists:
             hashLen = HashLength;
@@ -684,7 +684,7 @@ bool Equihash<N,K>::OptimisedSolve(const eh_HashState& base_state,
                         if (ic->size() == 0)
                             goto invalidsolution;
 
-                        X[r] = boost::none;
+                        X[r] = nullopt;
                         hashLen -= CollisionByteLength;
                         lenIndices *= 2;
                         rti = lti;

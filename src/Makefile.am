@@ -171,7 +171,6 @@ BITCOIN_CORE_H = \
   core_io.h \
   core_memusage.h \
   cuckoocache.h \
-  deprecation.h \
   fetchparams.h \
   flatfile.h \
   fs.h \
@@ -274,10 +273,7 @@ BITCOIN_CORE_H = \
   versionbitsinfo.h \
   walletinitinterface.h \
   wallet/asyncrpcoperation_common.h \
-  wallet/asyncrpcoperation_mergetoaddress.h \
-  wallet/asyncrpcoperation_saplingmigration.h \
   wallet/asyncrpcoperation_sendmany.h \
-  wallet/asyncrpcoperation_shieldcoinbase.h \
   wallet/coincontrol.h \
   wallet/inputcontrol.h \
   wallet/crypter.h \
@@ -296,7 +292,6 @@ BITCOIN_CORE_H = \
   wallet/walletutil.h \
   wallet/coinselection.h \
   warnings.h \
-  zcashparams.h \
   zmq/zmqabstractnotifier.h \
   zmq/zmqconfig.h\
   zmq/zmqnotificationinterface.h \
@@ -326,7 +321,6 @@ libbitcoin_server_a_SOURCES = \
   blockfilter.cpp \
   chain.cpp \
   consensus/tx_verify.cpp \
-  deprecation.cpp \
   flatfile.cpp \
   httprpc.cpp \
   httpserver.cpp \
@@ -394,10 +388,7 @@ libbitcoin_wallet_a_CXXFLAGS = $(AM_CXXFLAGS) $(PIE_FLAGS)
 libbitcoin_wallet_a_SOURCES = \
   interfaces/wallet.cpp \
   wallet/asyncrpcoperation_common.cpp \
-  wallet/asyncrpcoperation_mergetoaddress.cpp \
-  wallet/asyncrpcoperation_saplingmigration.cpp \
   wallet/asyncrpcoperation_sendmany.cpp \
-  wallet/asyncrpcoperation_shieldcoinbase.cpp \
   wallet/coincontrol.cpp \
   wallet/inputcontrol.cpp \
   wallet/crypter.cpp \
@@ -500,6 +491,8 @@ libbitcoin_consensus_a_SOURCES = \
   primitives/block.h \
   primitives/transaction.cpp \
   primitives/transaction.h \
+  proof_verifier.h \
+  proof_verifier.cpp \
   pubkey.cpp \
   pubkey.h \
   script/bitcoinconsensus.cpp \
@@ -553,7 +546,6 @@ libbitcoin_common_a_SOURCES = \
   transaction_builder.cpp \
   versionbitsinfo.cpp \
   warnings.cpp \
-  zcashparams.cpp \
   $(BITCOIN_CORE_H) \
   $(LIBZCASH_H)
 
@@ -720,7 +712,6 @@ zcash_libzcash_a_SOURCES = \
   zcash/address/sprout.cpp \
   zcash/address/zip32.cpp \
   zcash/JoinSplit.cpp \
-  zcash/Proof.cpp \
   zcash/Note.cpp \
   zcash/prf.cpp \
   zcash/util.cpp

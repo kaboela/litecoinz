@@ -11,7 +11,13 @@
 #include <stdint.h>
 #include <vector>
 
-static const int64_t DEFAULT_MAX_TIME_ADJUSTMENT = 35 * 60;
+/**
+ * Based on: https://github.com/zcash/zcash/issues/4021
+ * Following the reduction of MAX_FUTURE_BLOCK_TIME to 120 * 150 / 20 = 900
+ * DEFAULT_MAX_TIME_ADJUSTMENT is set to MAX_FUTURE_BLOCK_TIME / 2
+ * (Bitcoin original value: 70 * 60)
+*/
+static const int64_t DEFAULT_MAX_TIME_ADJUSTMENT = 450;
 
 class CNetAddr;
 

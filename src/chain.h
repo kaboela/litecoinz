@@ -19,16 +19,23 @@
 /**
  * Maximum amount of time that a block timestamp is allowed to exceed the
  * current network-adjusted time before the block will be accepted.
+ *
+ * Based on: https://github.com/zawy12/difficulty-algorithms/issues/3
+ * FTL = N*T/20 = 120 * 150 / 20
+ * Bitcoin original value: 2 * 60 * 60
  */
-static constexpr int64_t MAX_FUTURE_BLOCK_TIME = 2 * 60 * 60;
+static constexpr int64_t MAX_FUTURE_BLOCK_TIME = 120 * 150 / 20;
+static constexpr int64_t BITCOIN_MAX_FUTURE_BLOCK_TIME = 2 * 60 * 60;
 
 /**
  * Timestamp window used as a grace period by code that compares external
  * timestamps (such as timestamps passed to RPCs, or wallet key creation times)
  * to block timestamps. This should be set at least as high as
  * MAX_FUTURE_BLOCK_TIME.
+ *
+ * Folloing the change in MAX_FUTURE_BLOCK_TIME maintaining the original value.
  */
-static constexpr int64_t TIMESTAMP_WINDOW = MAX_FUTURE_BLOCK_TIME;
+static constexpr int64_t TIMESTAMP_WINDOW = BITCOIN_MAX_FUTURE_BLOCK_TIME;
 
 /**
  * Maximum gap between node time and block time used
@@ -186,7 +193,7 @@ public:
     //! Branch ID corresponding to the consensus rules used to validate this block.
     //! Only cached if block validity is BLOCK_VALID_CONSENSUS.
     //! Persisted at each activation height, memory-only for intervening blocks.
-    boost::optional<uint32_t> nCachedBranchId;
+    Optional<uint32_t> nCachedBranchId;
 
     //! The anchor for the tree state up to the start of this block
     uint256 hashSproutAnchor;
@@ -195,22 +202,22 @@ public:
     uint256 hashSproutRoot;
 
     //! Change in value held by the Sprout circuit over this block.
-    //! Will be boost::none for older blocks on old nodes until a reindex has taken place.
-    boost::optional<CAmount> nSproutValue;
+    //! Will be nullopt for older blocks on old nodes until a reindex has taken place.
+    Optional<CAmount> nSproutValue;
 
     //! (memory only) Total value held by the Sprout circuit up to and including this block.
-    //! Will be boost::none for on old nodes until a reindex has taken place.
-    //! Will be boost::none if nChainTx is zero.
-    boost::optional<CAmount> nChainSproutValue;
+    //! Will be nullopt for on old nodes until a reindex has taken place.
+    //! Will be nullopt if nChainTx is zero.
+    Optional<CAmount> nChainSproutValue;
 
     //! Change in value held by the Sapling circuit over this block.
-    //! Not a boost::optional because this was added before Sapling activated, so we can
+    //! Not a Optional because this was added before Sapling activated, so we can
     //! rely on the invariant that every block before this was added had nSaplingValue = 0.
     CAmount nSaplingValue;
 
     //! (memory only) Total value held by the Sapling circuit up to and including this block.
-    //! Will be boost::none if nChainTx is zero.
-    boost::optional<CAmount> nChainSaplingValue;
+    //! Will be nullopt if nChainTx is zero.
+    Optional<CAmount> nChainSaplingValue;
 
     //! block header
     int32_t nVersion;
@@ -245,13 +252,13 @@ public:
         nStatus = 0;
         nSequenceId = 0;
         nTimeMax = 0;
-        nCachedBranchId = boost::none;
+        nCachedBranchId = nullopt;
         hashSproutAnchor = uint256();
         hashSproutRoot = uint256();
-        nSproutValue = boost::none;
-        nChainSproutValue = boost::none;
+        nSproutValue = nullopt;
+        nChainSproutValue = nullopt;
         nSaplingValue = 0;
-        nChainSaplingValue = boost::none;
+        nChainSaplingValue = nullopt;
 
         nVersion        = 0;
         hashMerkleRoot  = uint256();

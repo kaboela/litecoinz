@@ -62,7 +62,7 @@ static CUpdatedBlock latestblock;
 
 /* Calculate the difficulty for a given block index.
  */
-double GetDifficultyINTERNAL(const CBlockIndex* blockindex, bool networkDifficulty)
+double GetDifficulty(const CBlockIndex* blockindex)
 {
     // Floating point number that is a multiple of the minimum difficulty,
     // minimum difficulty = 1.0.
@@ -74,14 +74,9 @@ double GetDifficultyINTERNAL(const CBlockIndex* blockindex, bool networkDifficul
             blockindex = ::ChainActive().Tip();
     }
 
-    uint32_t bits;
-    if (networkDifficulty) {
-        bits = GetNextWorkRequired(blockindex, nullptr, Params().GetConsensus());
-    } else {
-        bits = blockindex->nBits;
-    }
-
+    uint32_t bits = blockindex->nBits;
     uint32_t powLimit = UintToArith256(Params().GetConsensus().powLimit).GetCompact();
+
     int nShift = (bits >> 24) & 0xff;
     int nShiftAmount = (powLimit >> 24) & 0xff;
 
@@ -101,17 +96,7 @@ double GetDifficultyINTERNAL(const CBlockIndex* blockindex, bool networkDifficul
     return dDiff;
 }
 
-double GetDifficulty(const CBlockIndex* blockindex)
-{
-    return GetDifficultyINTERNAL(blockindex, false);
-}
-
-double GetNetworkDifficulty(const CBlockIndex* blockindex)
-{
-    return GetDifficultyINTERNAL(blockindex, true);
-}
-
-static UniValue ValuePoolDesc(const std::string &name, const boost::optional<CAmount> chainValue, const boost::optional<CAmount> valueDelta)
+static UniValue ValuePoolDesc(const std::string &name, const Optional<CAmount> chainValue, const Optional<CAmount> valueDelta)
 {
     UniValue rv(UniValue::VOBJ);
     rv.pushKV("id", name);
@@ -513,7 +498,7 @@ static UniValue getdifficulty(const JSONRPCRequest& request)
             }.Check(request);
 
     LOCK(cs_main);
-    return GetNetworkDifficulty(::ChainActive().Tip());
+    return GetDifficulty(::ChainActive().Tip());
 }
 
 static std::string EntryDescriptionString()
@@ -1590,7 +1575,7 @@ UniValue getblockchaininfo(const JSONRPCRequest& request)
     obj.pushKV("headers",               pindexBestHeader ? pindexBestHeader->nHeight : -1);
     obj.pushKV("synced",                !::ChainstateActive().IsInitialBlockDownload());
     obj.pushKV("bestblockhash",         tip->GetBlockHash().GetHex());
-    obj.pushKV("difficulty",            (double)GetNetworkDifficulty(tip));
+    obj.pushKV("difficulty",            (double)GetDifficulty(tip));
     obj.pushKV("mediantime",            (int64_t)tip->GetMedianTimePast());
     obj.pushKV("verificationprogress",  GuessVerificationProgress(Params().TxData(), tip));
     obj.pushKV("initialblockdownload",  ::ChainstateActive().IsInitialBlockDownload());
@@ -1602,8 +1587,8 @@ UniValue getblockchaininfo(const JSONRPCRequest& request)
     obj.pushKV("commitments",           static_cast<uint64_t>(tree.size()));
 
     UniValue valuePools(UniValue::VARR);
-    valuePools.push_back(ValuePoolDesc("sprout", tip->nChainSproutValue, boost::none));
-    valuePools.push_back(ValuePoolDesc("sapling", tip->nChainSaplingValue, boost::none));
+    valuePools.push_back(ValuePoolDesc("sprout", tip->nChainSproutValue, nullopt));
+    valuePools.push_back(ValuePoolDesc("sapling", tip->nChainSaplingValue, nullopt));
     obj.pushKV("valuePools",            valuePools);
 
     obj.pushKV("pruned",                fPruneMode);

@@ -12,20 +12,7 @@
 #include <tinyformat.h>
 #include <util/strencodings.h>
 
-#include <zcashparams.h>
-
-bool IsExpiredTx(const CTransaction &tx, int nBlockHeight)
-{
-    if (tx.nExpiryHeight == 0 || tx.IsCoinBase()) {
-        return false;
-    }
-    return (uint32_t)nBlockHeight > tx.nExpiryHeight;
-}
-
-bool IsExpiringSoonTx(const CTransaction &tx, int nNextBlockHeight)
-{
-    return IsExpiredTx(tx, nNextBlockHeight + TX_EXPIRING_SOON_THRESHOLD);
-}
+#include <sodium.h>
 
 /**
  * Check a transaction contextually against a set of consensus rules valid at a given block height.
@@ -83,10 +70,6 @@ bool ContextualCheckTransaction(const CTransaction& tx, CValidationState &state,
         // Reject transactions intended for Sprout
         if (!tx.fOverwintered)
             return state.Invalid(ValidationInvalidReason::CONSENSUS, false, REJECT_INVALID, "tx-overwinter-active");
-
-        // Check that all transactions are unexpired
-        if (IsExpiredTx(tx, nHeight))
-            return state.Invalid(ValidationInvalidReason::CONSENSUS, false, REJECT_INVALID, "tx-overwinter-expired");
     }
 
     // Rules that apply before Sapling:
@@ -126,7 +109,7 @@ bool ContextualCheckTransaction(const CTransaction& tx, CValidationState &state,
 
     if (!tx.vJoinSplit.empty())
     {
-        BOOST_STATIC_ASSERT(crypto_sign_PUBLICKEYBYTES == 32);
+        static_assert(crypto_sign_PUBLICKEYBYTES == 32);
 
         // We rely on libsodium to check that the signature is canonical.
         // https://github.com/jedisct1/libsodium/commit/62911edb7ff2275cccd74bf1c8aefcc4d76924e0
@@ -202,14 +185,14 @@ bool ContextualCheckTransaction(const CTransaction& tx, CValidationState &state,
     return true;
 }
 
-bool CheckTransaction(const CTransaction& tx, CValidationState &state, libzcash::ProofVerifier& verifier, bool fCheckDuplicateInputs)
+bool CheckTransaction(const CTransaction& tx, CValidationState &state, ProofVerifier& verifier, bool fCheckDuplicateInputs)
 {
     if (!CheckTransactionWithoutProofVerification(tx, state, fCheckDuplicateInputs)) {
         return false;
     } else {
         // Ensure that zk-SNARKs verify
         for (const JSDescription &joinsplit : tx.vJoinSplit) {
-            if (!joinsplit.Verify(*pzcashParams, verifier, tx.joinSplitPubKey))
+            if (!verifier.VerifySprout(joinsplit, tx.joinSplitPubKey))
                 return state.Invalid(ValidationInvalidReason::CONSENSUS, false, REJECT_INVALID, "bad-txns-joinsplit-verification-failed");
         }
         return true;
@@ -248,8 +231,6 @@ bool CheckTransactionWithoutProofVerification(const CTransaction& tx, CValidatio
             return state.Invalid(ValidationInvalidReason::CONSENSUS, false, REJECT_INVALID, "bad-tx-overwinter-version-too-low");
         if (tx.nVersionGroupId != OVERWINTER_VERSION_GROUP_ID && tx.nVersionGroupId != SAPLING_VERSION_GROUP_ID)
             return state.Invalid(ValidationInvalidReason::CONSENSUS, false, REJECT_INVALID, "bad-tx-version-group-id");
-        if (tx.nExpiryHeight >= TX_EXPIRY_HEIGHT_THRESHOLD)
-            return state.Invalid(ValidationInvalidReason::CONSENSUS, false, REJECT_INVALID, "bad-tx-expiry-height-too-high");
     }
 
     // Transactions containing empty `vin` must have either non-empty
